@@ -46,6 +46,12 @@ python3 "$REPO_DIR/scripts/research.py" 2>&1 | tee -a "$LOG_FILE"
 log "Running benchmark_analysis.py..."
 python3 "$REPO_DIR/scripts/benchmark_analysis.py" 2>&1 | tee -a "$LOG_FILE"
 
+# ── Plot any new benchmark JSON results ───────────────────────────────────────
+log "Plotting benchmark results..."
+for json_file in "$REPO_DIR"/benchmarks/*.json; do
+  [ -f "$json_file" ] && python3 "$REPO_DIR/scripts/plot_results.py" "$json_file" 2>&1 | tee -a "$LOG_FILE" || true
+done
+
 # ── Commit and push ───────────────────────────────────────────────────────────
 log "Committing results..."
 git -C "$REPO_DIR" add curations/ benchmarks/ logs/

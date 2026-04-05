@@ -1,0 +1,47 @@
+[
+  {
+    "name": "SGLang piecewise CUDA graph",
+    "date": "2026-04-05",
+    "model": "Qwen/Qwen3-0.6B",
+    "hardware": "spark-01 GB10 SM121",
+    "framework": "SGLang 0.5.9 + sgl_kernel 0.3.21+cu130",
+    "conditions": [
+      {
+        "label": "Standard CUDA graph",
+        "color": "#4A90D9",
+        "offline": {
+          "ttft_p50": 4367, "ttft_p99": 5241,
+          "tpot_p50": 39.3,  "tpot_p99": 126.0,
+          "throughput": 2217
+        },
+        "online": {
+          "ttft_p50": 29.8, "ttft_p99": 44.7,
+          "tpot_p50": 9.50, "tpot_p99": 11.0
+        }
+      },
+      {
+        "label": "Piecewise CUDA graph",
+        "color": "#E8563A",
+        "offline": {
+          "ttft_p50": 1033, "ttft_p99": 1526,
+          "tpot_p50": 36.7,  "tpot_p99": 106.3,
+          "throughput": 3218
+        },
+        "online": {
+          "ttft_p50": 30.8, "ttft_p99": 43.0,
+          "tpot_p50": 9.87, "tpot_p99": 11.1
+        }
+      }
+    ],
+    "notes": [
+      "Offline: +45% throughput, -76% TTFT",
+      "Online (10 req/s): both modes tied",
+      "Gains appear only under saturation",
+      "",
+      "HW: GB10 = SM121 (compute cap 12.1)",
+      "Needs sgl_kernel cu130 aarch64 wheel",
+      "Running on SM100 PTX fallback",
+      "Native SM121 = ~10-20% more headroom"
+    ]
+  }
+]
