@@ -75,7 +75,7 @@ experiments:
   endpoint: http://192.168.1.201:8000
   date_run: '2026-04-07'
 - name: vllm-no-enforce-eager-pp2
-  status: queued
+  status: failed
   priority: 5
   framework: vllm
   model: Qwen/Qwen3-Coder-Next-FP8
@@ -86,8 +86,9 @@ experiments:
   expected_delta: +15% throughput if capture succeeds on GB10
   image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
   risk: may hang or OOM on GB10 unified memory — monitor closely
+  date_run: '2026-04-07'
 - name: vllm-speculative-decoding-pp2
-  status: queued
+  status: running
   priority: 6
   framework: vllm
   model: Qwen/Qwen3-Coder-Next-FP8
