@@ -16,6 +16,7 @@ experiments:
     itl_p99_ms: null
     notes: First deployment — SGLang on spark-01 was consuming GPU, required pkill
       before deploy
+
 - name: vllm-chunked-prefill-pp2
   status: failed
   priority: 1
@@ -25,10 +26,11 @@ experiments:
   description: Enable chunked prefill to reduce TTFT at high concurrency
   variable_changed: add --enable-chunked-prefill to vllm serve args
   hypothesis: Chunked prefill distributes prefill across decode steps, reducing TTFT
-    p99 at c=32
+    p99 at c=32. sara4dev saw +50% throughput on SM120; expect similar on SM121.
   expected_delta: -20% TTFT p99, throughput neutral or slight regression
   image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
   date_run: '2026-04-06'
+
 - name: vllm-higher-mem-utilization-pp2
   status: failed
   priority: 2
@@ -37,12 +39,14 @@ experiments:
   node_config: pp2-spark01-spark02
   description: Increase gpu-memory-utilization from 0.75 to 0.85
   variable_changed: --gpu-memory-utilization 0.85
-  hypothesis: More KV cache blocks available → better batching → higher throughput
+  hypothesis: More KV cache blocks available → better batching → higher throughput.
+    sara4dev saw regression (3553→3568 only) at 0.90 — 0.85 is a safer step first.
   expected_delta: +10-15% throughput if Ray overhead allows
   image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
   date_run: '2026-04-06'
+
 - name: vllm-prefix-caching-pp2
-  status: failed
+  status: running
   priority: 3
   framework: vllm
   model: Qwen/Qwen3-Coder-Next-FP8
@@ -50,12 +54,15 @@ experiments:
   description: Enable automatic prefix caching (APC)
   variable_changed: add --enable-prefix-caching (already in manifest — verify hit
     rate)
-  hypothesis: System prompts cached across requests → reduced TTFT for repeated prefixes
+  hypothesis: System prompts cached across requests → reduced TTFT for repeated prefixes.
+    sara4dev saw prefix-caching-off was neutral (4239 vs 4241 baseline) suggesting
+    APC overhead is minimal; may help for code workloads with repeated prompts.
   expected_delta: -30% TTFT p50 for prompts sharing a system prefix
   image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
   notes: Previous run produced all-zero primary (c=32 0/50 ok) — endpoint was degraded
-    from race condition; requeuied for clean run
+    from race condition; requeued for clean run
   date_run: '2026-04-07'
+
 - name: sglang-baseline-qwen3-coder-next
   status: running
   priority: 4
@@ -64,11 +71,14 @@ experiments:
   node_config: single-spark01
   description: SGLang baseline on spark-01 only for framework comparison
   variable_changed: framework switch from vllm to sglang
-  hypothesis: SGLang RadixAttention + piecewise CUDA graph faster under saturation
+  hypothesis: SGLang RadixAttention + piecewise CUDA graph faster under saturation.
+    sara4dev confirmed SGLang beats vLLM at 3B with defaults (4291 vs 3553 tok/s, +21%).
+    May be even larger advantage on GB10 where vLLM eager mode has higher overhead.
   expected_delta: +10-20% throughput at c=32 vs vllm baseline
   image: lmsysorg/sglang:nightly-dev-cu13-20260318-cb1e63ab
   endpoint: http://192.168.1.201:8000
   date_run: '2026-04-07'
+
 - name: vllm-no-enforce-eager-pp2
   status: queued
   priority: 5
@@ -77,31 +87,78 @@ experiments:
   node_config: pp2-spark01-spark02
   description: Remove --enforce-eager to enable CUDA graph capture
   variable_changed: remove --enforce-eager flag
-  hypothesis: CUDA graph capture reduces kernel launch overhead → +10-25% throughput
-  expected_delta: +15% throughput if capture succeeds on GB10
+  hypothesis: CUDA graph capture reduces kernel launch overhead. sara4dev measured
+    +19% on SM120 (3553→4241 tok/s). Expect similar on SM121 if capture succeeds.
+  expected_delta: +15-20% throughput if capture succeeds on GB10
   image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
-  risk: may hang or OOM on GB10 unified memory — monitor closely
-- name: vllm-speculative-decoding-pp2
+  risk: may hang or OOM on GB10 unified memory — monitor closely. sara4dev confirmed
+    CUDA graphs + DISABLE_CUSTOM_ALL_REDUCE=true required for any TP>1 on Blackwell.
+    For PP=2 (single GPU per node), custom-all-reduce is not needed.
+
+- name: vllm-fp8-kv-cache-pp2
   status: queued
   priority: 6
+  framework: vllm
+  model: Qwen/Qwen3-Coder-Next-FP8
+  node_config: pp2-spark01-spark02
+  description: Enable FP8 KV cache quantization (--kv-cache-dtype fp8)
+  variable_changed: add --kv-cache-dtype fp8
+  hypothesis: sara4dev's #1 finding — FP8 KV cache halves KV memory footprint,
+    enabling roughly 2x more concurrent sequences. The qwen-fp8-weights experiment
+    at sara4dev showed +65% throughput (3553→5863 tok/s) though that was weight FP8,
+    not just KV. On GB10 with 128GB unified memory, expect meaningful gains but
+    smaller percentage due to our larger memory budget.
+  expected_delta: +20-40% throughput at c=32 from larger effective KV cache
+  image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
+  notes: sara4dev's fp8-kv-cache result was 3733 tok/s (baseline 3553, +5%) — modest
+    on SM120. The bigger win came from FP8 weights. On GB10 with Qwen3-Coder-Next-FP8
+    (already FP8 weights), this isolates pure KV cache benefit.
+
+- name: vllm-speculative-decoding-pp2
+  status: queued
+  priority: 7
   framework: vllm
   model: Qwen/Qwen3-Coder-Next-FP8
   node_config: pp2-spark01-spark02
   description: Enable speculative decoding with a draft model
   variable_changed: add --speculative-config JSON (vLLM 0.18.0 syntax — replaced --speculative-model
     / --num-speculative-tokens)
-  hypothesis: Draft model proposes tokens, target verifies in parallel → lower TPOT
+  hypothesis: Draft model proposes tokens, target verifies in parallel → lower TPOT.
+    sara4dev research confirms EAGLE-3 achieves 2-6x on NeurIPS'25. Qwen3-0.6B as
+    draft for Qwen3-Coder-Next may have high acceptance rate (same family architecture).
   expected_delta: -30% ITL p50 for typical completion lengths
   image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
+
+- name: vllm-tp2-disable-custom-ar-pp1
+  status: queued
+  priority: 8
+  framework: vllm
+  model: Qwen/Qwen3-Coder-Next-FP8
+  node_config: single-spark01
+  description: TP=2 within spark-01 (intra-node NVLink-C2C) with --disable-custom-all-reduce
+  variable_changed: TP=2 intra-node + disable-custom-all-reduce flag
+  hypothesis: sara4dev confirmed DISABLE_CUSTOM_ALL_REDUCE=true is REQUIRED for TP>1
+    on Blackwell (vLLM IPC fast-path fails on first inference). With GB10's NVLink-C2C
+    between CPU and GPU on the same SoC, TP=2 within one node may give different
+    throughput characteristics than sara4dev's PCIe-connected dual-GPU setup.
+    sara4dev tp2-dual-gpu result was LOWER than baseline (3233 vs 3553) for 3B model.
+    Qwen3-Coder-Next is much larger — TP=2 may be beneficial when model barely fits.
+  expected_delta: unknown — could improve or degrade depending on GB10 NVLink bandwidth
+  image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
+  notes: sara4dev learning — ALWAYS add --disable-custom-all-reduce for TP>1 on Blackwell.
+    Do NOT use with Dynamo disagg (sara4dev found CUDA graphs hurt Dynamo -12%).
+
 - name: vllm-longer-context-pp2
   status: queued
-  priority: 7
+  priority: 9
   framework: vllm
   model: Qwen/Qwen3-Coder-Next-FP8
   node_config: pp2-spark01-spark02
   description: Increase max-model-len from 131072 to 200000
   variable_changed: --max-model-len 200000
-  hypothesis: Qwen3-Coder-Next supports 1M context; test practical limit on 2x128GB
+  hypothesis: Qwen3-Coder-Next supports 1M context; test practical limit on 2x128GB.
+    sara4dev long-context-32k saw throughput neutral (4260 vs 4241) suggesting context
+    window doesn't hurt much at our benchmark concurrency levels.
   expected_delta: longer context available; throughput may drop ~5% due to larger
     KV budget
   image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1

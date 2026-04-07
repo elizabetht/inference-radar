@@ -46,6 +46,18 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "8622076160")
 LLM_ENDPOINT = os.environ.get("LLM_BASE_URL", "http://192.168.1.200:8000")
 
 
+# ── Logging ───────────────────────────────────────────────────────────────────
+
+def sched_log(msg: str):
+    """Print to stdout and append to dated scheduler log file."""
+    line = f"[{time.strftime('%H:%M:%S')}] {msg}"
+    print(line, flush=True)
+    log_file = REPO_ROOT / "logs" / f"{time.strftime('%Y-%m-%d')}-scheduler.log"
+    log_file.parent.mkdir(exist_ok=True)
+    with open(log_file, "a") as f:
+        f.write(line + "\n")
+
+
 # ── Queue helpers ─────────────────────────────────────────────────────────────
 
 def load_queue() -> dict:
@@ -53,7 +65,10 @@ def load_queue() -> dict:
 
 
 def save_queue(data: dict):
-    QUEUE_FILE.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False))
+    """Atomic write via tmp + rename so Claude edits don't race with a running scheduler."""
+    tmp = QUEUE_FILE.with_suffix(".yaml.tmp")
+    tmp.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False))
+    tmp.replace(QUEUE_FILE)
 
 
 def next_experiment(data: dict):
@@ -258,18 +273,18 @@ def main():
     lock_fd = acquire_lock()
 
     ensure_results_file()
-    print(f"[scheduler] Starting. queue={QUEUE_FILE}", flush=True)
+    sched_log(f"Starting. queue={QUEUE_FILE}")
 
     while True:
         if STOP_FILE.exists():
-            print("[scheduler] STOP file found — exiting", flush=True)
+            sched_log("STOP file found — exiting")
             break
 
         data = load_queue()
         exp = next_experiment(data)
 
         if exp is None:
-            print("[scheduler] Queue drained — nothing to run", flush=True)
+            sched_log("Queue drained — nothing to run")
             break
 
         # Mark running
@@ -303,7 +318,7 @@ def main():
             f"✅ {exp['name']}: {notes}" if status == "done"
             else f"❌ {exp['name']} FAILED: {notes}"
         )
-        print(f"[scheduler] {msg}", flush=True)
+        sched_log(msg)
         telegram(f"inference-research\n{msg}")
         git_commit(f"autoresearch: {status} {exp['name']}")
 
@@ -312,7 +327,7 @@ def main():
 
         time.sleep(POLL_SEC)
 
-    print("[scheduler] Done", flush=True)
+    sched_log("Done")
 
 
 if __name__ == "__main__":
