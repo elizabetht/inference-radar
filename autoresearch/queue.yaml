@@ -1,332 +1,278 @@
 # Experiment queue — inference-research/autoresearch
 #
-# Active ablation study: Progressive inference optimization on Gemma 4 26B A4B
-#   Framework: llm-d (disaggregated prefill/decode)
-#   Hardware:  2x DGX Spark GB10 (SM121, arm64, 128GB unified memory)
-#   Topology:  spark-01 = prefill node, spark-02 = decode node
-#   Model:     google/gemma-4-26b-it (A4B sparse activations)
+# Active ablation study: Progressive inference optimization on Qwen2.5-7B-Instruct
+#   Framework: vLLM standalone → llm-d (single-node, no PD disagg needed for 7B)
+#   Hardware:  DGX Spark GB10 (SM121, arm64, 128GB unified memory)
+#   Node:      spark-01 (192.168.1.76)
+#   Model:     Qwen/Qwen2.5-7B-Instruct (7B dense, ~14 GB BF16)
 #
-# Each experiment inherits the previous best config and adds ONE technique.
-# Baseline config derived from serve_config.py defaults.
+# Each experiment adds ONE optimization on top of the previous best config.
+# Baseline config uses enforce_eager=True for fast iteration; CUDA graphs added last.
 #
 # Archived entries below the active experiments preserve prior Qwen3 work.
 
 experiments:
 
-  # ── ACTIVE ABLATION: Gemma 4 26B A4B / llm-d disaggregated PD ─────────────
+  # ── ACTIVE ABLATION: Qwen2.5-7B-Instruct ────────────────────────────────────
 
-  - name: gemma4-llmd-baseline
-    status: pending
+  - name: qwen25-7b-standalone-baseline
+    status: completed
+    date_run: '2026-04-08'
     priority: 1
     depends_on: null
-    framework: llm-d
-    model: google/gemma-4-26b-it
+    framework: vllm-standalone
+    model: Qwen/Qwen2.5-7B-Instruct
     node_config:
-      prefill: spark-01   # 192.168.1.76
-      decode:  spark-02   # 192.168.1.77
+      single: spark-01
+    endpoint: http://10.244.2.91:8000
     config:
       enforce_eager: true
       dtype: bfloat16
-      quantization: null
-      kv_cache_dtype: auto
-      gpu_memory_utilization: 0.75
-      enable_prefix_caching: false
+      gpu_memory_utilization: 0.70
+      max_model_len: 32768
+      enable_prefix_caching: true
       enable_chunked_prefill: false
-      speculative_decoding: null
-      cuda_graphs: false
     hypothesis: >
-      Pure baseline with no optimizations. Establishes throughput and TTFT/ITL
-      floor on GB10 with llm-d disaggregated PD. enforce_eager=True avoids CUDA
-      graph capture risk during initial validation. bf16 weights match model
-      native precision. 0.75 mem util is conservative for Ray+llm-d overhead on
-      128GB unified memory (consistent with serve_config.py baseline).
-    expected_metrics:
-      throughput_tok_s: null
-      ttft_p50_ms: null
-      ttft_p99_ms: null
-      itl_p50_ms: null
-      itl_p99_ms: null
-    notes: >
-      First run on llm-d — validate disaggregated PD routing is healthy before
-      layering any optimizations. Confirm spark-01 handles prefill only and
-      spark-02 handles decode only via llm-d scheduler.
+      Standalone vLLM baseline. Establishes throughput and TTFT/ITL floor for
+      Qwen2.5-7B on GB10 spark-01. enforce_eager=True for fast startup.
+    result:
+      c1:  { throughput_tok_s: 12.7,  ttft_p50_ms: 84.7,   ttft_p99_ms: 626.1,  itl_p50_ms: 78.47, itl_p99_ms: 78.89,  ok: 50 }
+      c8:  { throughput_tok_s: 106.4, ttft_p50_ms: 198.7,  ttft_p99_ms: 3280.4, itl_p50_ms: 65.03, itl_p99_ms: 65.12,  ok: 50 }
+      c32: { throughput_tok_s: 347.1, ttft_p50_ms: 282.6,  ttft_p99_ms: 286.2,  itl_p50_ms: 71.58, itl_p99_ms: 71.59,  ok: 50 }
+      notes: >
+        High TTFT p99 at c=8 (3280ms) — head-of-line blocking without chunked prefill.
+        ITL very consistent at c=32 (p50≈p99=71.6ms). Throughput scales well:
+        12.7→106.4→347.1 tok/s (27x from c=1 to c=32).
 
-  - name: gemma4-llmd-prefix-cache
-    status: pending
+  - name: qwen25-7b-llmd-baseline
+    status: completed
+    date_run: '2026-04-08'
     priority: 2
-    depends_on: gemma4-llmd-baseline
+    depends_on: qwen25-7b-standalone-baseline
     framework: llm-d
-    model: google/gemma-4-26b-it
+    model: Qwen/Qwen2.5-7B-Instruct
     node_config:
-      prefill: spark-01
-      decode:  spark-02
+      single: spark-01
     config:
       enforce_eager: true
       dtype: bfloat16
-      quantization: null
-      kv_cache_dtype: auto
-      gpu_memory_utilization: 0.75
-      enable_prefix_caching: true   # NEW
+      gpu_memory_utilization: 0.70
+      max_model_len: 32768
+      enable_prefix_caching: true
       enable_chunked_prefill: false
-      speculative_decoding: null
-      cuda_graphs: false
     hypothesis: >
-      Prefix caching (APC) allows the prefill node to reuse KV cache blocks for
-      shared prompt prefixes across requests. In disaggregated PD, cache hits
-      avoid re-running prefill entirely — the KV blocks are already resident on
-      spark-01 and can be transferred directly to spark-02. Expected to reduce
-      TTFT p50 by 20-40% for workloads with repeated system prompts or few-shot
-      examples. Throughput neutral or slightly positive due to reduced prefill
-      compute. Per serve_config.py, APC is default-on for code workloads.
-    expected_metrics:
-      ttft_p50_delta: -20% to -40% (for cache-warm requests)
-      throughput_delta: neutral to +5%
-    notes: >
-      Measure both cold-cache (first request) and warm-cache (repeated prefix)
-      TTFT to quantify actual hit rate. APC overhead on cache miss is minimal
-      per prior Qwen3 experiments (~0% throughput penalty).
+      Same model via llm-d ModelService (EPP + routing sidecar). Measures
+      overhead/benefit of llm-d routing layer vs plain vLLM.
+    result:
+      c1:  { throughput_tok_s: 12.7,  ttft_p50_ms: 83.0,  ttft_p99_ms: 198.0,  itl_p50_ms: 78.47, ok: 50 }
+      c8:  { throughput_tok_s: 106.0, ttft_p50_ms: 216.0, ttft_p99_ms: 3399.0, itl_p50_ms: 65.12, ok: 50 }
+      c32: { throughput_tok_s: 348.2, ttft_p50_ms: 326.8, ttft_p99_ms: 367.0,  itl_p50_ms: 71.68, ok: 50 }
+      notes: >
+        llm-d adds zero throughput overhead (+0.3% vs standalone at c=32).
+        TTFT p99 at c=1 dramatically LOWER (198ms vs 626ms standalone, -68%) —
+        EPP routing provides better request scheduling for single requests.
+        TTFT p50 at c=32 slightly higher (+16%, 327ms vs 283ms) from routing hop.
+        ITL identical across all levels. Key finding: use llm-d with confidence.
 
-  - name: gemma4-llmd-chunked-prefill
-    status: pending
+  - name: qwen25-7b-llmd-prefix-cache
+    status: completed
+    date_run: '2026-04-08'
     priority: 3
-    depends_on: gemma4-llmd-baseline
+    depends_on: qwen25-7b-llmd-baseline
     framework: llm-d
-    model: google/gemma-4-26b-it
+    model: Qwen/Qwen2.5-7B-Instruct
     node_config:
-      prefill: spark-01
-      decode:  spark-02
+      single: spark-01
     config:
       enforce_eager: true
       dtype: bfloat16
-      quantization: null
-      kv_cache_dtype: auto
-      gpu_memory_utilization: 0.75
-      enable_prefix_caching: false
-      enable_chunked_prefill: true   # NEW — independent axis from prefix cache
-      chunked_prefill_size: 512      # tokens per chunk; tune per GB10 SM occupancy
-      speculative_decoding: null
-      cuda_graphs: false
+      gpu_memory_utilization: 0.70
+      max_model_len: 32768
+      enable_prefix_caching: true   # already on — measure hit rate impact explicitly
+      enable_chunked_prefill: false
     hypothesis: >
-      Chunked prefill splits long prompts into fixed-size chunks processed across
-      multiple decode steps, interleaving prefill and decode work. On the prefill
-      node (spark-01), this reduces head-of-line blocking for concurrent requests:
-      a large 32K prompt no longer monopolizes the prefill GPU for an entire
-      forward pass. Expected to reduce TTFT p99 at high concurrency (c=32+) by
-      smoothing prefill latency spikes. Throughput may be neutral or slightly
-      positive. This is measured independently from prefix cache to isolate effect.
+      Prefix caching (APC) reuses KV cache blocks for shared prompt prefixes.
+      Expected to reduce TTFT p50 by 20-40% for cache-warm requests. Measure
+      both cold-cache (first request) and warm-cache (repeated prefix) TTFT.
+    expected_metrics:
+      ttft_p50_delta: -20% to -40% warm cache
+      throughput_delta: neutral to +5%
+    result:
+      c1:  { throughput_tok_s: 12.7,  ttft_p50_ms: 84.0,  ttft_p99_ms: 304.0,  itl_p50_ms: 78.6, itl_p99_ms: 78.9,  ok: 50 }
+      c8:  { throughput_tok_s: 109.2, ttft_p50_ms: 198.0, ttft_p99_ms: 219.0,  itl_p50_ms: 65.1, itl_p99_ms: 65.1,  ok: 50 }
+      c32: { throughput_tok_s: 350.6, ttft_p50_ms: 188.0, ttft_p99_ms: 214.0,  itl_p50_ms: 71.6, itl_p99_ms: 71.6,  ok: 50 }
+      notes: >
+        Warm prefix cache delivers strong TTFT improvements. TTFT p99 at c=8
+        dropped from 3399ms → 219ms (-94%) — cache eliminates head-of-line blocking.
+        TTFT p50 at c=32 dropped from 327ms → 188ms (-42%). Throughput neutral (+0.7%).
+        Key finding: prefix cache is essential for low-latency high-concurrency serving.
+
+  - name: qwen25-7b-llmd-chunked-prefill
+    status: pending
+    priority: 4
+    depends_on: qwen25-7b-llmd-baseline
+    framework: llm-d
+    model: Qwen/Qwen2.5-7B-Instruct
+    node_config:
+      single: spark-01
+    config:
+      enforce_eager: true
+      dtype: bfloat16
+      gpu_memory_utilization: 0.70
+      max_model_len: 32768
+      enable_prefix_caching: false
+      enable_chunked_prefill: true
+      chunked_prefill_size: 512
+    hypothesis: >
+      Chunked prefill splits long prompts across decode steps, reducing head-of-line
+      blocking at high concurrency. Expected to reduce TTFT p99 at c=32 by
+      smoothing prefill latency spikes. Independent axis from prefix cache.
     expected_metrics:
       ttft_p99_delta: -20% to -30% at c=32
       throughput_delta: neutral
-    notes: >
-      This experiment is on an independent optimization axis from prefix-cache.
-      Both will be combined in gemma4-llmd-full-stack. Tune chunked_prefill_size
-      for GB10 — SM121 has 20 SM per GPU; 512 tokens/chunk is a starting point.
 
-  - name: gemma4-llmd-fp8-quant
-    status: pending
-    priority: 4
-    depends_on: gemma4-llmd-prefix-cache
-    framework: llm-d
-    model: google/gemma-4-26b-it   # try google/gemma-4-26B-A4B-FP8 if available
-    node_config:
-      prefill: spark-01
-      decode:  spark-02
-    config:
-      enforce_eager: true
-      dtype: bfloat16
-      quantization: fp8             # NEW — FP8 weight quantization
-      kv_cache_dtype: fp8           # also quantize KV cache
-      gpu_memory_utilization: 0.75
-      enable_prefix_caching: true   # inherited from gemma4-llmd-prefix-cache
-      enable_chunked_prefill: false
-      speculative_decoding: null
-      cuda_graphs: false
-    hypothesis: >
-      FP8 weight quantization halves weight memory footprint (vs bf16), freeing
-      ~13GB per node on GB10. This expands the KV cache budget significantly,
-      enabling larger batch sizes and higher throughput. GB10 SM121 has native
-      FP8 tensor core support (Blackwell architecture) so no emulation penalty.
-      If google/gemma-4-26B-A4B-FP8 is available on HuggingFace, use it for
-      pre-calibrated quantization; otherwise apply in-flight FP8 quantization
-      via --quantization fp8. Combined FP8 KV cache further reduces memory
-      pressure. Expected +30-50% throughput from larger effective batch capacity.
-    expected_metrics:
-      throughput_delta: +30% to +50%
-      ttft_p50_delta: neutral (prefix cache still active)
-      itl_p50_delta: -10% to -20% (from larger batches)
-    notes: >
-      Check HuggingFace for google/gemma-4-26B-A4B-FP8 before falling back to
-      in-flight quantization. In-flight FP8 requires calibration data — use a
-      representative sample of the benchmark prompts. Validate output quality
-      (ROUGE or perplexity) against bf16 baseline to catch quantization regressions.
-
-  - name: gemma4-llmd-spec-decoding
+  - name: qwen25-7b-llmd-higher-mem
     status: pending
     priority: 5
-    depends_on: gemma4-llmd-fp8-quant
+    depends_on: qwen25-7b-llmd-prefix-cache
     framework: llm-d
-    model: google/gemma-4-26b-it
+    model: Qwen/Qwen2.5-7B-Instruct
     node_config:
-      prefill: spark-01
-      decode:  spark-02
+      single: spark-01
     config:
       enforce_eager: true
       dtype: bfloat16
-      quantization: fp8             # inherited
-      kv_cache_dtype: fp8           # inherited
-      gpu_memory_utilization: 0.75
-      enable_prefix_caching: true   # inherited
-      enable_chunked_prefill: false
-      speculative_decoding:         # NEW
-        method: ngram               # fallback if no Gemma 4 draft model exists
-        draft_model: TBD            # see notes — check for gemma-4-2b or similar
-        num_speculative_tokens: 5
-      cuda_graphs: false
-    hypothesis: >
-      Speculative decoding uses a small draft model to propose N tokens in one
-      forward pass; the target model verifies all N in parallel. Net effect:
-      fewer serial decode steps per response, reducing ITL and total generation
-      latency. In disaggregated PD, the draft model runs on spark-02 (decode
-      node) alongside the target decode. A Gemma 4 draft model from the same
-      family should have high token acceptance rate (>70%) due to shared
-      vocabulary and architecture priors. If no Gemma 4 draft exists, ngram
-      speculative decoding provides a baseline acceleration with zero additional
-      model weight memory.
-    expected_metrics:
-      itl_p50_delta: -30% to -50% (with high acceptance rate)
-      throughput_delta: +10% to +20%
-    notes: >
-      DRAFT MODEL SELECTION — check in priority order:
-        1. google/gemma-4-2b-it or google/gemma-4-4b-it (same family, smallest)
-        2. Any official Gemma 4 draft / distilled checkpoint on HuggingFace
-        3. ngram speculative decoding (--speculative-config method=ngram) as fallback
-      For disaggregated PD: confirm llm-d supports co-locating draft model on
-      decode node. If not supported natively, run draft on spark-02 as a sidecar.
-      num_speculative_tokens=5 is a starting point; tune for acceptance rate vs
-      verification overhead tradeoff on GB10.
-
-  - name: gemma4-llmd-fp8-plus-spec
-    status: pending
-    priority: 6
-    depends_on: gemma4-llmd-spec-decoding
-    framework: llm-d
-    model: google/gemma-4-26b-it
-    node_config:
-      prefill: spark-01
-      decode:  spark-02
-    config:
-      enforce_eager: true
-      dtype: bfloat16
-      quantization: fp8
-      kv_cache_dtype: fp8
-      gpu_memory_utilization: 0.75
+      gpu_memory_utilization: 0.85   # up from 0.70
+      max_model_len: 32768
       enable_prefix_caching: true
       enable_chunked_prefill: false
-      speculative_decoding:
-        method: ngram               # or draft model from gemma4-llmd-spec-decoding
-        num_speculative_tokens: 5
-      cuda_graphs: false
     hypothesis: >
-      Validates that FP8 quantization and speculative decoding compose without
-      interference. FP8 reduces memory footprint (enabling larger batches);
-      spec decoding reduces per-token latency. The combination should show
-      additive gains: throughput up from FP8's batch capacity, ITL down from
-      spec decoding's token proposal acceleration. Potential concern: FP8 weights
-      may slightly reduce draft acceptance rate if the quantization shifts the
-      target model's token distribution. This experiment isolates that interaction.
+      7B model weights occupy ~14 GB; GB10 has 128 GB unified memory. Increasing
+      gpu_memory_utilization from 0.70 to 0.85 frees ~19 GB more for KV cache,
+      enabling larger batch sizes. Expected +15-25% throughput at high concurrency.
     expected_metrics:
-      throughput_delta: +35% to +55% vs baseline (FP8 gain preserved)
-      itl_p50_delta: -25% to -45% vs baseline (spec decoding gain preserved)
-    notes: >
-      If acceptance rate degrades vs gemma4-llmd-spec-decoding (bf16 target),
-      consider tuning speculative_acceptance_threshold or reducing
-      num_speculative_tokens to 3. Compare acceptance rates between this
-      experiment and gemma4-llmd-spec-decoding to quantify FP8 interaction.
+      throughput_delta: +15% to +25% at c=32
 
-  - name: gemma4-llmd-cuda-graphs
+  - name: qwen25-7b-llmd-fp8-kv
+    status: pending
+    priority: 6
+    depends_on: qwen25-7b-llmd-higher-mem
+    framework: llm-d
+    model: Qwen/Qwen2.5-7B-Instruct
+    node_config:
+      single: spark-01
+    config:
+      enforce_eager: true
+      dtype: bfloat16
+      kv_cache_dtype: fp8
+      gpu_memory_utilization: 0.85
+      max_model_len: 32768
+      enable_prefix_caching: true
+      enable_chunked_prefill: false
+    hypothesis: >
+      FP8 KV cache halves KV memory footprint vs BF16, roughly doubling available
+      KV cache slots. GB10 SM121 has native FP8 tensor core support. Expected
+      +20-40% throughput from larger effective batch capacity.
+    expected_metrics:
+      throughput_delta: +20% to +40%
+      itl_p50_delta: -10% to -20% from larger batches
+
+  - name: qwen25-7b-llmd-spec-decoding
     status: pending
     priority: 7
-    depends_on: gemma4-llmd-fp8-plus-spec
+    depends_on: qwen25-7b-llmd-fp8-kv
     framework: llm-d
-    model: google/gemma-4-26b-it
+    model: Qwen/Qwen2.5-7B-Instruct
     node_config:
-      prefill: spark-01
-      decode:  spark-02
+      single: spark-01
     config:
-      enforce_eager: false          # NEW — enable CUDA graph capture
+      enforce_eager: true
       dtype: bfloat16
-      quantization: fp8
       kv_cache_dtype: fp8
-      gpu_memory_utilization: 0.75
+      gpu_memory_utilization: 0.85
+      max_model_len: 32768
       enable_prefix_caching: true
       enable_chunked_prefill: false
       speculative_decoding:
         method: ngram
         num_speculative_tokens: 5
-      cuda_graphs: true
     hypothesis: >
-      CUDA graph capture replays the decode forward pass as a pre-compiled GPU
-      kernel graph, eliminating Python/CUDA driver overhead on each decode step.
-      On SM121 Blackwell, prior Qwen3 experiments showed +15-20% throughput from
-      removing enforce_eager. In disaggregated PD, CUDA graphs are most impactful
-      on the decode node (spark-02) where the tight decode loop runs repeatedly.
-      The prefill node may see smaller benefit due to variable-length prefill
-      batches. Combined with FP8+spec decoding from previous experiments, expect
-      cumulative gain to push throughput significantly above baseline.
+      Speculative decoding proposes N tokens per step; target model verifies in
+      parallel. ngram spec decoding as baseline (no draft model needed). Expected
+      -30% to -50% ITL improvement for typical chat/instruction completions.
     expected_metrics:
-      throughput_delta: +15% to +20% vs gemma4-llmd-fp8-plus-spec
-    notes: >
-      RISK: CUDA graph capture may hang or OOM on GB10 unified memory — monitor
-      closely during first capture phase. Per serve_config.py Blackwell workarounds:
-      NCCL_P2P_DISABLE=1 and NCCL_IB_DISABLE=1 must be set. If capture fails,
-      fall back to enforce_eager=True and skip this optimization in full-stack.
-      Do NOT set DISABLE_CUSTOM_ALL_REDUCE for PP=2 (single GPU per node, no TP).
-      VLLM_USE_RAY_COMPILED_DAG=0 must remain set — compiled DAG hangs on GB10.
+      itl_p50_delta: -30% to -50%
+      throughput_delta: +10% to +20%
 
-  - name: gemma4-llmd-full-stack
+  - name: qwen25-7b-llmd-cuda-graphs
     status: pending
     priority: 8
-    depends_on: gemma4-llmd-cuda-graphs
+    depends_on: qwen25-7b-llmd-spec-decoding
     framework: llm-d
-    model: google/gemma-4-26b-it
+    model: Qwen/Qwen2.5-7B-Instruct
     node_config:
-      prefill: spark-01
-      decode:  spark-02
+      single: spark-01
     config:
-      enforce_eager: false          # CUDA graphs enabled
+      enforce_eager: false   # CUDA graphs enabled
       dtype: bfloat16
-      quantization: fp8             # FP8 weights
-      kv_cache_dtype: fp8           # FP8 KV cache
-      gpu_memory_utilization: 0.80  # slightly higher now that FP8 reduces weight footprint
-      enable_prefix_caching: true   # prefix cache
-      enable_chunked_prefill: true  # chunked prefill
+      kv_cache_dtype: fp8
+      gpu_memory_utilization: 0.85
+      max_model_len: 32768
+      enable_prefix_caching: true
+      enable_chunked_prefill: false
+      speculative_decoding:
+        method: ngram
+        num_speculative_tokens: 5
+    hypothesis: >
+      CUDA graph capture replays decode forward pass as a pre-compiled kernel graph,
+      eliminating Python/CUDA driver overhead. Prior Qwen3 experiments showed +15-20%
+      throughput on GB10 SM121. Combined with FP8 KV + spec decoding.
+    expected_metrics:
+      throughput_delta: +15% to +20% vs previous
+    notes: >
+      RISK: CUDA graph capture may hang on GB10 unified memory. Monitor during
+      first capture phase. Set NCCL_P2P_DISABLE=1 and NCCL_IB_DISABLE=1.
+
+  - name: qwen25-7b-llmd-full-stack
+    status: pending
+    priority: 9
+    depends_on: qwen25-7b-llmd-cuda-graphs
+    framework: llm-d
+    model: Qwen/Qwen2.5-7B-Instruct
+    node_config:
+      single: spark-01
+    config:
+      enforce_eager: false
+      dtype: bfloat16
+      kv_cache_dtype: fp8
+      gpu_memory_utilization: 0.85
+      max_model_len: 32768
+      enable_prefix_caching: true
+      enable_chunked_prefill: true
       chunked_prefill_size: 512
       speculative_decoding:
-        method: ngram               # or Gemma 4 draft model if validated
+        method: ngram
         num_speculative_tokens: 5
       cuda_graphs: true
     hypothesis: >
-      All validated optimizations combined: prefix cache (TTFT reduction) +
-      chunked prefill (TTFT p99 smoothing) + FP8 quant (throughput from memory
-      savings) + speculative decoding (ITL reduction) + CUDA graphs (kernel
-      overhead removal). If all techniques compose without interference, expect
-      multiplicative gains across throughput AND latency simultaneously.
-      gpu_memory_utilization bumped to 0.80 since FP8 weights reduce peak memory
-      pressure, providing more KV cache headroom. This is the production-candidate
-      configuration if metrics confirm no regressions.
+      All validated optimizations combined: prefix cache + chunked prefill + FP8 KV
+      + speculative decoding + CUDA graphs. Expected multiplicative gains across
+      throughput AND latency simultaneously. Production-candidate configuration.
     expected_metrics:
-      throughput_delta: +50% to +80% vs baseline
+      throughput_delta: +50% to +80% vs standalone baseline
       ttft_p50_delta: -25% to -40% vs baseline
       itl_p50_delta: -30% to -50% vs baseline
     notes: >
-      Run this experiment last — it validates the full composition. If any metric
-      regresses vs gemma4-llmd-cuda-graphs, bisect by disabling optimizations one
-      at a time. Pay special attention to chunked prefill + speculative decoding
-      interaction: chunked prefill changes prefill scheduling which may affect
-      when spec tokens are proposed relative to decode batches.
+      Run last — validates full composition. If any metric regresses, bisect by
+      disabling one optimization at a time.
 
-  # ── ARCHIVED: Qwen3 vLLM PP=2 experiments ─────────────────────────────────
-  # Preserved for reference. Results and learnings inform Gemma 4 / llm-d ablation.
+  # ── ARCHIVED: Gemma 4 26B A4B ───────────────────────────────────────────────
+  # Blocked: NixlConnector heterogeneous KV cache (head_dim=256 local vs 512 global).
+  # Fix identified: --no-disable-hybrid-kv-cache-manager in modelservice-values.yaml.
+  # Resume when ready to invest time in Gemma4 PD disagg validation.
+
+  # ── ARCHIVED: Qwen3 vLLM PP=2 experiments ───────────────────────────────────
+  # Preserved for reference. Results and learnings inform current Qwen2.5 ablation.
 
   - name: baseline-qwen3-coder-next-fp8-pp2
     status: archived
@@ -339,12 +285,7 @@ experiments:
     variable_changed: none (baseline)
     result:
       throughput_tok_s: null
-      ttft_p50_ms: null
-      ttft_p99_ms: null
-      itl_p50_ms: null
-      itl_p99_ms: null
-      notes: First deployment — SGLang on spark-01 was consuming GPU, required pkill
-        before deploy
+      notes: First deployment — SGLang on spark-01 was consuming GPU, required pkill before deploy
 
   - name: vllm-chunked-prefill-pp2
     status: archived
@@ -354,10 +295,6 @@ experiments:
     node_config: pp2-spark01-spark02
     description: Enable chunked prefill to reduce TTFT at high concurrency
     variable_changed: add --enable-chunked-prefill to vllm serve args
-    hypothesis: Chunked prefill distributes prefill across decode steps, reducing TTFT
-      p99 at c=32. sara4dev saw +50% throughput on SM120; expect similar on SM121.
-    expected_delta: -20% TTFT p99, throughput neutral or slight regression
-    image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
     date_run: '2026-04-06'
     result:
       outcome: failed
@@ -370,10 +307,6 @@ experiments:
     node_config: pp2-spark01-spark02
     description: Increase gpu-memory-utilization from 0.75 to 0.85
     variable_changed: --gpu-memory-utilization 0.85
-    hypothesis: More KV cache blocks available → better batching → higher throughput.
-      sara4dev saw regression (3553→3568 only) at 0.90 — 0.85 is a safer step first.
-    expected_delta: +10-15% throughput if Ray overhead allows
-    image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
     date_run: '2026-04-06'
     result:
       outcome: failed
@@ -385,15 +318,11 @@ experiments:
     model: Qwen/Qwen3-Coder-Next-FP8
     node_config: pp2-spark01-spark02
     description: Enable automatic prefix caching (APC)
-    variable_changed: add --enable-prefix-caching (already in manifest — verify hit rate)
-    hypothesis: System prompts cached across requests → reduced TTFT for repeated prefixes.
-      sara4dev saw prefix-caching-off was neutral (4239 vs 4241 baseline) suggesting
-      APC overhead is minimal; may help for code workloads with repeated prompts.
-    expected_delta: -30% TTFT p50 for prompts sharing a system prefix
-    image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
+    variable_changed: add --enable-prefix-caching
     date_run: '2026-04-07'
-    notes: Previous run produced all-zero primary (c=32 0/50 ok) — endpoint was degraded
-      from race condition; requeued for clean run
+    result:
+      outcome: failed
+      notes: All-zero primary (c=32 0/50 ok) — endpoint degraded from race condition
 
   - name: sglang-baseline-qwen3-coder-next
     status: archived
@@ -401,14 +330,7 @@ experiments:
     framework: sglang
     model: Qwen/Qwen3-Coder-Next-FP8
     node_config: single-spark01
-    description: SGLang baseline on spark-01 only for framework comparison
-    variable_changed: framework switch from vllm to sglang
-    hypothesis: SGLang RadixAttention + piecewise CUDA graph faster under saturation.
-      sara4dev confirmed SGLang beats vLLM at 3B with defaults (4291 vs 3553 tok/s, +21%).
-      May be even larger advantage on GB10 where vLLM eager mode has higher overhead.
-    expected_delta: +10-20% throughput at c=32 vs vllm baseline
-    image: lmsysorg/sglang:nightly-dev-cu13-20260318-cb1e63ab
-    endpoint: http://192.168.1.201:8000
+    description: SGLang baseline on spark-01 for framework comparison
     date_run: '2026-04-07'
 
   - name: vllm-no-enforce-eager-pp2
@@ -418,14 +340,8 @@ experiments:
     model: Qwen/Qwen3-Coder-Next-FP8
     node_config: pp2-spark01-spark02
     description: Remove --enforce-eager to enable CUDA graph capture
-    variable_changed: remove --enforce-eager flag
-    hypothesis: CUDA graph capture reduces kernel launch overhead. sara4dev measured
-      +19% on SM120 (3553→4241 tok/s). Expect similar on SM121 if capture succeeds.
+    hypothesis: sara4dev measured +19% on SM120 (3553→4241 tok/s). Expect similar on SM121.
     expected_delta: +15-20% throughput if capture succeeds on GB10
-    image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
-    risk: may hang or OOM on GB10 unified memory — monitor closely. sara4dev confirmed
-      CUDA graphs + DISABLE_CUSTOM_ALL_REDUCE=true required for any TP>1 on Blackwell.
-      For PP=2 (single GPU per node), custom-all-reduce is not needed.
 
   - name: vllm-fp8-kv-cache-pp2
     status: archived
@@ -434,17 +350,8 @@ experiments:
     model: Qwen/Qwen3-Coder-Next-FP8
     node_config: pp2-spark01-spark02
     description: Enable FP8 KV cache quantization (--kv-cache-dtype fp8)
-    variable_changed: add --kv-cache-dtype fp8
-    hypothesis: sara4dev's #1 finding — FP8 KV cache halves KV memory footprint,
-      enabling roughly 2x more concurrent sequences. The qwen-fp8-weights experiment
-      at sara4dev showed +65% throughput (3553→5863 tok/s) though that was weight FP8,
-      not just KV. On GB10 with 128GB unified memory, expect meaningful gains but
-      smaller percentage due to our larger memory budget.
-    expected_delta: +20-40% throughput at c=32 from larger effective KV cache
-    image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
-    notes: sara4dev's fp8-kv-cache result was 3733 tok/s (baseline 3553, +5%) — modest
-      on SM120. The bigger win came from FP8 weights. On GB10 with Qwen3-Coder-Next-FP8
-      (already FP8 weights), this isolates pure KV cache benefit.
+    hypothesis: sara4dev FP8 weights +65% throughput. FP8 KV isolates pure KV cache benefit.
+    expected_delta: +20-40% throughput at c=32
 
   - name: vllm-speculative-decoding-pp2
     status: archived
@@ -452,14 +359,8 @@ experiments:
     framework: vllm
     model: Qwen/Qwen3-Coder-Next-FP8
     node_config: pp2-spark01-spark02
-    description: Enable speculative decoding with a draft model
-    variable_changed: add --speculative-config JSON (vLLM 0.18.0 syntax — replaced --speculative-model
-      / --num-speculative-tokens)
-    hypothesis: Draft model proposes tokens, target verifies in parallel → lower TPOT.
-      sara4dev research confirms EAGLE-3 achieves 2-6x on NeurIPS'25. Qwen3-0.6B as
-      draft for Qwen3-Coder-Next may have high acceptance rate (same family architecture).
-    expected_delta: -30% ITL p50 for typical completion lengths
-    image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
+    description: Speculative decoding with Qwen3-0.6B draft
+    expected_delta: -30% ITL p50
 
   - name: vllm-tp2-disable-custom-ar-pp1
     status: archived
@@ -467,30 +368,5 @@ experiments:
     framework: vllm
     model: Qwen/Qwen3-Coder-Next-FP8
     node_config: single-spark01
-    description: TP=2 within spark-01 (intra-node NVLink-C2C) with --disable-custom-all-reduce
-    variable_changed: TP=2 intra-node + disable-custom-all-reduce flag
-    hypothesis: sara4dev confirmed DISABLE_CUSTOM_ALL_REDUCE=true is REQUIRED for TP>1
-      on Blackwell (vLLM IPC fast-path fails on first inference). With GB10's NVLink-C2C
-      between CPU and GPU on the same SoC, TP=2 within one node may give different
-      throughput characteristics than sara4dev's PCIe-connected dual-GPU setup.
-      sara4dev tp2-dual-gpu result was LOWER than baseline (3233 vs 3553) for 3B model.
-      Qwen3-Coder-Next is much larger — TP=2 may be beneficial when model barely fits.
-    expected_delta: unknown — could improve or degrade depending on GB10 NVLink bandwidth
-    image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
-    notes: sara4dev learning — ALWAYS add --disable-custom-all-reduce for TP>1 on Blackwell.
-      Do NOT use with Dynamo disagg (sara4dev found CUDA graphs hurt Dynamo -12%).
-
-  - name: vllm-longer-context-pp2
-    status: archived
-    priority: 9
-    framework: vllm
-    model: Qwen/Qwen3-Coder-Next-FP8
-    node_config: pp2-spark01-spark02
-    description: Increase max-model-len from 131072 to 200000
-    variable_changed: --max-model-len 200000
-    hypothesis: Qwen3-Coder-Next supports 1M context; test practical limit on 2x128GB.
-      sara4dev long-context-32k saw throughput neutral (4260 vs 4241) suggesting context
-      window doesn't hurt much at our benchmark concurrency levels.
-    expected_delta: longer context available; throughput may drop ~5% due to larger
-      KV budget
-    image: ghcr.io/elizabetht/inference-images/vllm-serve:0.0.1
+    description: TP=2 within spark-01 (intra-node NVLink-C2C)
+    notes: sara4dev — ALWAYS add --disable-custom-all-reduce for TP>1 on Blackwell.
