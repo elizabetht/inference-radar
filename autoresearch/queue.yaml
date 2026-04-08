@@ -247,7 +247,8 @@ experiments:
         Key finding: ngram spec decoding unsuitable for diverse completions at high concurrency.
 
   - name: qwen25-7b-llmd-cuda-graphs
-    status: pending
+    status: completed
+    date_run: '2026-04-08'
     priority: 8
     depends_on: qwen25-7b-llmd-spec-decoding
     framework: llm-d
@@ -274,6 +275,16 @@ experiments:
     notes: >
       RISK: CUDA graph capture may hang on GB10 unified memory. Monitor during
       first capture phase. Set NCCL_P2P_DISABLE=1 and NCCL_IB_DISABLE=1.
+    result:
+      c1:  { throughput_tok_s: 12.6, ttft_p50_ms: 82.0,  ttft_p99_ms: 155.0,  itl_p50_ms: 79.0, itl_p99_ms: 85.8, ok: 50 }
+      c8:  { throughput_tok_s: 101.8, ttft_p50_ms: 142.0, ttft_p99_ms: 3436.0, itl_p50_ms: 68.5, itl_p99_ms: 80.6, ok: 50 }
+      c32: { throughput_tok_s: 285.1, ttft_p50_ms: 183.0, ttft_p99_ms: 187.0,  itl_p50_ms: 76.4, itl_p99_ms: 84.0, ok: 50 }
+      notes: >
+        CUDA graphs further regressed throughput (-6.4%, 304.6→285.1 tok/s at c=32).
+        Combined overhead of FP8 KV quantize/dequantize + low spec decoding acceptance rate +
+        CUDA graph capture overhead exceeds any kernel launch savings on GB10 SM121.
+        Hypothesis of +15-20% throughput NOT confirmed.
+        Key insight: stacking regressions — each optimization after prefix cache has made things worse.
 
   - name: qwen25-7b-llmd-full-stack
     status: pending
