@@ -175,7 +175,8 @@ experiments:
         Key finding: memory headroom is not the limiting factor for 7B at these concurrency levels.
 
   - name: qwen25-7b-llmd-fp8-kv
-    status: pending
+    status: completed
+    date_run: '2026-04-08'
     priority: 6
     depends_on: qwen25-7b-llmd-higher-mem
     framework: llm-d
@@ -197,6 +198,15 @@ experiments:
     expected_metrics:
       throughput_delta: +20% to +40%
       itl_p50_delta: -10% to -20% from larger batches
+    result:
+      c1:  { throughput_tok_s: 12.5,  ttft_p50_ms: 142.0, ttft_p99_ms: 176.0, itl_p50_ms: 79.2, itl_p99_ms: 81.4, ok: 50 }
+      c8:  { throughput_tok_s: 112.8, ttft_p50_ms: 193.0, ttft_p99_ms: 3458.0, itl_p50_ms: 63.3, itl_p99_ms: 65.4, ok: 50 }
+      c32: { throughput_tok_s: 334.5, ttft_p50_ms: 248.0, ttft_p99_ms: 261.0, itl_p50_ms: 69.7, itl_p99_ms: 75.2, ok: 50 }
+      notes: >
+        FP8 KV cache REGRESSED vs higher-mem baseline: throughput -4.2% (348.9→334.5 tok/s),
+        TTFT p50 at c=32 +28% (193→248ms). FP8 quantization overhead outweighs memory savings
+        for Qwen2.5-7B at these concurrency levels. Hypothesis of +20-40% throughput not confirmed.
+        GB10 SM121 FP8 tensor cores do not compensate for per-access quantize/dequantize cost.
 
   - name: qwen25-7b-llmd-spec-decoding
     status: pending
