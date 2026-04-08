@@ -143,7 +143,8 @@ experiments:
         latency but prefix cache is the primary lever for c=8 tail latency.
 
   - name: qwen25-7b-llmd-higher-mem
-    status: pending
+    status: completed
+    date_run: '2026-04-08'
     priority: 5
     depends_on: qwen25-7b-llmd-prefix-cache
     framework: llm-d
@@ -163,6 +164,15 @@ experiments:
       enabling larger batch sizes. Expected +15-25% throughput at high concurrency.
     expected_metrics:
       throughput_delta: +15% to +25% at c=32
+    result:
+      c1:  { throughput_tok_s: 12.7,  ttft_p50_ms: 84.0,  ttft_p99_ms: 165.0,  itl_p50_ms: 78.4, itl_p99_ms: 78.8, ok: 50 }
+      c8:  { throughput_tok_s: 105.7, ttft_p50_ms: 201.0, ttft_p99_ms: 3465.0, itl_p50_ms: 65.3, itl_p99_ms: 65.5, ok: 50 }
+      c32: { throughput_tok_s: 348.9, ttft_p50_ms: 193.0, ttft_p99_ms: 286.0,  itl_p50_ms: 71.9, itl_p99_ms: 72.0, ok: 50 }
+      notes: >
+        Higher gpu_memory_utilization (0.85 vs 0.70) yielded zero throughput improvement (+0.2%).
+        For Qwen2.5-7B at c=32 with 256-token outputs, KV cache memory was not the bottleneck.
+        Cold cache (redeployment) restored c=8 TTFT p99 to 3465ms. Hypothesis not confirmed.
+        Key finding: memory headroom is not the limiting factor for 7B at these concurrency levels.
 
   - name: qwen25-7b-llmd-fp8-kv
     status: pending
