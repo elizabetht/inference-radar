@@ -319,6 +319,17 @@ experiments:
       Run last — validates full composition. If any metric regresses, bisect by
       disabling one optimization at a time.
 
+  - name: trtllm-nemotron-120b-nvfp4-spark
+    status: pending
+    priority: 1
+    framework: tensorrt-llm
+    model: nvidia/Nemotron-Super-120B-A12B-NVFP4
+    node_config: single-spark01
+    hypothesis: >
+      NVIDIA published official DGX Spark test configs for Nemotron-Super-120B NVFP4.
+      Establish baseline perf with FP8 KV cache, CUDA graphs, MTP spec decode.
+    source: github-tensorrt-llm-pr-12830
+
   # ── ARCHIVED: Gemma 4 26B A4B ───────────────────────────────────────────────
   # Blocked: NixlConnector heterogeneous KV cache (head_dim=256 local vs 512 global).
   # Fix identified: --no-disable-hybrid-kv-cache-manager in modelservice-values.yaml.
