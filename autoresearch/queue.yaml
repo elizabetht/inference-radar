@@ -320,7 +320,7 @@ experiments:
       disabling one optimization at a time.
 
   - name: trtllm-nemotron-120b-nvfp4-spark
-    status: pending
+    status: queued
     priority: 1
     framework: tensorrt-llm
     model: nvidia/Nemotron-Super-120B-A12B-NVFP4
