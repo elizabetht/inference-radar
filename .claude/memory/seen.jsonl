@@ -1,0 +1,71 @@
+{"id": "github-sglang-release-v0.5.10", "first_seen": "2026-04-14", "title": "SGLang v0.5.10 — piecewise CUDA graph default, PD disagg GPU staging, IndexCache"}
+{"id": "github-sglang-release-v0.5.10.post1", "first_seen": "2026-04-14", "title": "SGLang v0.5.10.post1 — flashinfer JIT cubin patch"}
+{"id": "github-sglang-pr-16331", "first_seen": "2026-04-14", "title": "Piecewise CUDA Graph enabled by default in SGLang"}
+{"id": "github-sglang-pr-19890", "first_seen": "2026-04-14", "title": "GPU staging buffer for PD disaggregation — ~5x throughput on MoE at c=128+"}
+{"id": "github-sglang-pr-21405", "first_seen": "2026-04-14", "title": "IndexCache for DeepSeek V3.2 — reuse topk_indices, +6-11% throughput"}
+{"id": "github-sglang-pr-20343", "first_seen": "2026-04-14", "title": "HiSparse sparse attention integration for DeepSeek V3.2 and GLM-5"}
+{"id": "github-sglang-pr-21080", "first_seen": "2026-04-14", "title": "Speculative decoding (EAGLE3) + FlashAttention 4 backend support"}
+{"id": "github-sglang-pr-21952", "first_seen": "2026-04-14", "title": "Gemma 4 support in SGLang (Dense 2B/4B/31B + MoE 26B-A4B)"}
+{"id": "github-sglang-pr-22754", "first_seen": "2026-04-14", "title": "Fix deadlock and TOCTOU race in pause-aware weight update locking"}
+{"id": "github-sglang-pr-22735", "first_seen": "2026-04-14", "title": "Remove dead rematch path in SessionAwareCache.release_session"}
+{"id": "github-llm-d-inference-scheduler-pr-746", "first_seen": "2026-04-14", "title": "llm-d sidecar proxy hot path — P99 1000ms to 100ms at 2000 concurrent requests"}
+{"id": "github-llm-d-inference-scheduler-pr-806", "first_seen": "2026-04-14", "title": "Import gateway-api-inference-extension v1.5.0-rc1 (phase 1/2)"}
+{"id": "github-llm-d-kv-cache-manager-pr-505", "first_seen": "2026-04-14", "title": "Statically link libstdc++ in fs_connector wheel for vLLM v0.17.1"}
+{"id": "github-llm-d-kv-cache-manager-pr-488", "first_seen": "2026-04-14", "title": "Concurrency stress tests for KV-cache index operations"}
+{"id": "github-llm-d-pr-1123", "first_seen": "2026-04-14", "title": "OCI well-lit path for P/D disaggregation"}
+{"id": "github-llm-d-pr-1138", "first_seen": "2026-04-14", "title": "Disaggregation architecture documentation (EPP, NIXL/RDMA, fault tolerance)"}
+{"id": "github-llm-d-release-v0.6.0", "first_seen": "2026-04-14", "title": "llm-d v0.6.0 — vLLM v0.17.1, P/D disagg on RoCE/GDR, topology-aware scheduling"}
+{"id": "llm-d-blog-predicted-latency-scheduling", "first_seen": "2026-04-14", "title": "llm-d Predicted-Latency Based Scheduling — XGBoost, 43% lower P50 E2E latency"}
+{"id": "github-tensorrt-llm-pr-12909", "first_seen": "2026-04-14", "title": "Fix disagg KV cache transfer crash on reuse budget skip — 864 errors/run to 0"}
+{"id": "github-tensorrt-llm-pr-12919", "first_seen": "2026-04-14", "title": "Fix KvCacheAwareRouter for chat API + add disagg aiperf benchmark"}
+{"id": "github-tensorrt-llm-pr-12913", "first_seen": "2026-04-14", "title": "Fix scheduler hang PP+disagg+block_reuse+chunked_prefill (NVBug 5991576)"}
+{"id": "github-tensorrt-llm-pr-12936", "first_seen": "2026-04-14", "title": "E2E test for PP+disagg+block_reuse (additional coverage)"}
+{"id": "github-tensorrt-llm-pr-12866", "first_seen": "2026-04-14", "title": "AutoDeploy: Gemma-4-31B-it with NVFP4 quantization and FP8 KV cache"}
+{"id": "github-tensorrt-llm-pr-12955", "first_seen": "2026-04-14", "title": "Fix Gemma-4 MoE config — disable multi_stream_moe, fix OOM"}
+{"id": "github-tensorrt-llm-pr-13006", "first_seen": "2026-04-14", "title": "Revert EAGLE3 dynamic tree speculative decoding support"}
+{"id": "github-tensorrt-llm-pr-12830", "first_seen": "2026-04-14", "title": "Nemotron-Super-120B NVFP4 functional and perf tests on DGX Spark"}
+{"id": "github-tensorrt-llm-pr-13014", "first_seen": "2026-04-14", "title": "AutoDeploy: Qwen3.5 accuracy test for NVFP4"}
+{"id": "github-tensorrt-llm-pr-12512", "first_seen": "2026-04-14", "title": "FlexKV — flexible KV cache connector for disaggregated serving"}
+{"id": "github-dynamo-pr-8142", "first_seen": "2026-04-14", "title": "KV-Router: Route pinned requests through scheduler (WSPT ordering fix)"}
+{"id": "github-dynamo-pr-7973", "first_seen": "2026-04-14", "title": "KV-Router: Split Dynamo-native remote indexer (DYN-2593)"}
+{"id": "github-dynamo-pr-8137", "first_seen": "2026-04-14", "title": "Planner: Add optimization_target for zero-config autoscaling"}
+{"id": "github-dynamo-pr-7489", "first_seen": "2026-04-14", "title": "Fix KV block leak on client cancel during NIXL transfer — 3.1% to 0.018% stuck rate"}
+{"id": "github-dynamo-pr-8097", "first_seen": "2026-04-14", "title": "KV-Router: Event-driven queue wake on remote lifecycle changes"}
+{"id": "github-dynamo-pr-7590", "first_seen": "2026-04-14", "title": "KV cache transfer estimated latency metric (NIXL observability)"}
+{"id": "github-dynamo-pr-7409", "first_seen": "2026-04-14", "title": "vLLM Omni disaggregation (multi-stage AR+Diffusion)"}
+{"id": "github-dynamo-pr-8078", "first_seen": "2026-04-14", "title": "Planner diagnostics metrics and interactive HTML report"}
+{"id": "github-dynamo-pr-8136", "first_seen": "2026-04-14", "title": "Router: Add pending ISL token queue metrics"}
+{"id": "github-dynamo-pr-7604", "first_seen": "2026-04-14", "title": "Fix TRT-LLM disagg_request_id for PYTHON transceiver"}
+{"id": "github-dynamo-pr-8130", "first_seen": "2026-04-14", "title": "Fix KVBM NCCL version query at runtime (forward compatibility)"}
+{"id": "github-dynamo-pr-8108", "first_seen": "2026-04-14", "title": "Cache exported GMS handles on allocation (NIXL zero-copy overhead reduction)"}
+{"id": "github-nixl-pr-1341", "first_seen": "2026-04-14", "title": "NIXL EP: High-throughput MoE dispatch/combine kernels (DeepEP port, no NVSHMEM)"}
+{"id": "github-nixl-pr-1506", "first_seen": "2026-04-14", "title": "NIXL libfabric: Fix multi-GPU memory registration"}
+{"id": "github-dynamo-release-v1.0", "first_seen": "2026-04-14", "title": "NVIDIA Dynamo 1.0 GA — open-source inference OS"}
+{"id": "arxiv-2604.08426", "first_seen": "2026-04-14", "title": "KV Cache Offloading for Context-Intensive Tasks"}
+{"id": "arxiv-2604.07815", "first_seen": "2026-04-14", "title": "AsyncTLS: Asynchronous Two-level Sparse Attention, 1.3-4.7x E2E throughput"}
+{"id": "arxiv-2604.08075", "first_seen": "2026-04-14", "title": "Dual-Pool Token-Budget Routing — 31-42% GPU-hour reduction"}
+{"id": "arxiv-2604.07609", "first_seen": "2026-04-14", "title": "Blink: CPU-Free LLM Inference via SmartNIC — 2.1x decode, 8.47x P99 TTFT"}
+{"id": "arxiv-2604.07622", "first_seen": "2026-04-14", "title": "DIVERSED: Relaxed Speculative Decoding via Dynamic Ensemble Verification"}
+{"id": "arxiv-2604.07394", "first_seen": "2026-04-14", "title": "Flux Attention: Context-Aware Hybrid Attention — 2.8x prefill, 2.0x decode speedup"}
+{"id": "arxiv-2604.07472", "first_seen": "2026-04-14", "title": "Fast Heterogeneous Serving: SLO-Constrained Mixed-Scale LLM Allocation"}
+{"id": "arxiv-2604.04722", "first_seen": "2026-04-14", "title": "Adaptive KV-Cache Quantization for Lightweight On-Device LLMs"}
+{"id": "arxiv-2604.04654", "first_seen": "2026-04-14", "title": "Communication-Efficient Collaborative LLM Inference over LEO Satellites"}
+{"id": "arxiv-2604.06798", "first_seen": "2026-04-14", "title": "MoBiE: Binary MoE PTQ — 2x speedup on Qwen3-30B-A3B (ACL 2026)"}
+{"id": "mlcommons-mlperf-inference-v6-0", "first_seen": "2026-04-14", "title": "MLPerf Inference v6.0 — 5 new benchmarks including DeepSeek-R1, GPT-OSS-120B MoE"}
+{"id": "nvidia-mlperf-v6-blackwell-ultra-records", "first_seen": "2026-04-14", "title": "NVIDIA GB300 NVL72: 2.77x DeepSeek-R1 gain, 2.49M tok/s offline"}
+{"id": "google-gemma-4-release", "first_seen": "2026-04-14", "title": "Google Gemma 4 — Apache 2.0, 26B MoE (3.8B active), 31B Dense, 256K ctx"}
+{"id": "meta-llama-4-scout-maverick-release", "first_seen": "2026-04-14", "title": "Meta Llama 4 Scout (17B active/109B) + Maverick (17B active/400B) open-weight MoE"}
+{"id": "mistral-codestral-2-release", "first_seen": "2026-04-14", "title": "Mistral Codestral 2: 22B Apache 2.0, beats GPT-4o on HumanEval"}
+{"id": "vllm-v0-19-0-release", "first_seen": "2026-04-14", "title": "vLLM v0.19.0: zero-bubble async spec decode, CPU KV offload, ViT CUDA graphs"}
+{"id": "huggingface-transformers-v5", "first_seen": "2026-04-14", "title": "HuggingFace Transformers v5: inference-first redesign, required for Gemma 4"}
+{"id": "sglang-radixark-spinout", "first_seen": "2026-04-14", "title": "SGLang commercialized as RadixArk (~$400M valuation, Accel-led)"}
+{"id": "hn-47421736-llmtop", "first_seen": "2026-04-14", "title": "llmtop: htop-style dashboard for vLLM/SGLang/Ollama clusters"}
+{"id": "github-vllm-pr-39450", "first_seen": "2026-04-14", "title": "Eagle3 spec decode for Gemma 4 — 2.95 mean accept length, 64.9% draft acceptance"}
+{"id": "github-vllm-pr-38496", "first_seen": "2026-04-14", "title": "Fused probabilistic rejection sample kernels — up to 13.6% throughput improvement"}
+{"id": "github-vllm-pr-39542", "first_seen": "2026-04-14", "title": "Fix sparse attention tensor shape crash: DeepSeek-V3.2 + spec decode + padding"}
+{"id": "github-vllm-pr-32662", "first_seen": "2026-04-14", "title": "CPU support for draft model speculative decoding (OpenMP fallbacks)"}
+{"id": "github-vllm-pr-39206", "first_seen": "2026-04-14", "title": "Assert async scheduling is active for spec decode methods"}
+{"id": "github-vllm-pr-38610", "first_seen": "2026-04-14", "title": "Fix size mismatch on extract hidden states proposer (spec decode)"}
+{"id": "github-vllm-pr-39547", "first_seen": "2026-04-14", "title": "Fuse zero initializer for FP8 DeepGemm block quant kernel"}
+{"id": "github-vllm-pr-39763", "first_seen": "2026-04-14", "title": "Offload blocking preprocessing/postprocessing to thread pool for pooling endpoints"}
+{"id": "github-vllm-release-v0.19.0", "first_seen": "2026-04-14", "title": "vLLM v0.19.0 — zero-bubble async spec decode, CPU KV offload, ViT CUDA graphs, Triton MoE +9.9%"}
