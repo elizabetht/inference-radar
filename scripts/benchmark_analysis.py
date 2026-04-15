@@ -18,12 +18,14 @@ import json
 import datetime
 import textwrap
 import urllib.request
+import urllib.parse
+import http.client
 from pathlib import Path
 
 
-# Local LLM endpoint (SGLang on spark-01, tunnelled to localhost:30001 by run_nightly.sh)
+# Local LLM endpoint — Envoy AI Gateway at MetalLB 192.168.1.200:8000
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://192.168.1.200:8000")
-LLM_MODEL    = os.environ.get("LLM_MODEL",    "Qwen/Qwen3-Coder-Next-FP8")
+LLM_MODEL    = os.environ.get("LLM_MODEL",    "meta-llama/Llama-3.1-8B-Instruct")
 
 CLUSTER_SPEC = """
 2-node DGX Spark cluster:
@@ -37,18 +39,26 @@ CLUSTER_SPEC = """
 
 
 def llm_analyze(prompt: str) -> str:
+    # SGLang Llama-3.1-8B effective max_seq_len ~5632 tokens; truncate prompt to fit.
+    if len(prompt) > 14000:
+        prompt = prompt[:14000] + "\n\n[truncated for context window]"
     payload = json.dumps({
         "model": LLM_MODEL,
-        "max_tokens": 4096,
+        "max_tokens": 512,
         "messages": [{"role": "user", "content": prompt}],
     }).encode()
-    req = urllib.request.Request(
-        f"{LLM_BASE_URL}/v1/chat/completions",
-        data=payload,
-        headers={"content-type": "application/json"},
+    parsed = urllib.parse.urlparse(LLM_BASE_URL)
+    conn = http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=180)
+    conn.request(
+        "POST", "/v1/chat/completions", body=payload,
+        headers={"Content-Type": "application/json", "Host": "api.tokenlabs.run"},
     )
-    with urllib.request.urlopen(req, timeout=180) as r:
-        resp = json.loads(r.read())
+    r = conn.getresponse()
+    if r.status != 200:
+        body = r.read(512).decode(errors="replace")
+        raise Exception(f"HTTP {r.status}: {body}")
+    resp = json.loads(r.read())
+    conn.close()
     return resp["choices"][0]["message"]["content"]
 
 
