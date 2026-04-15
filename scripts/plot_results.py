@@ -48,7 +48,10 @@ def plot_experiment(exp: dict, out_path: pathlib.Path):
     import matplotlib.patches as mpatches
     import numpy as np
 
-    conditions = exp["conditions"]
+    conditions = exp.get("conditions", [])
+    if not conditions:
+        print(f"  SKIP {exp.get('id', '?')} — no conditions data")
+        return
     date = exp.get("date", datetime.date.today().isoformat())
     model = exp.get("model", "")
     hardware = exp.get("hardware", "")
