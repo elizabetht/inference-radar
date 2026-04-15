@@ -25,7 +25,7 @@ log() { echo "[$(date -u +%T)] $*" | tee -a "$LOG_FILE"; }
 
 # ── SSH tunnel to spark-01 SGLang ─────────────────────────────────────────────
 
-if ! curl -sf "http://${LLM_EXT}:${LLM_PORT}/health" >/dev/null 2>&1; then
+if ! curl -sf -H "Host: api.tokenlabs.run" "http://${LLM_EXT}:${LLM_PORT}/v1/models" >/dev/null 2>&1; then
   log "ERROR: LLM gateway not reachable at ${LLM_EXT}:${LLM_PORT} — check inference pods in token-labs"
   exit 1
 fi
