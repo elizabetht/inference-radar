@@ -39,7 +39,9 @@ LOOKBACK_DAYS = 1  # PRs merged in last N days (2 on weekends via cron logic)
 
 # Local LLM endpoint (SGLang on spark-01, tunnelled to localhost:30001 by run_nightly.sh)
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://192.168.1.200:8000")
-LLM_MODEL    = os.environ.get("LLM_MODEL",    "Qwen/Qwen2.5-7B-Instruct")
+# Llama-3.1-8B via SGLang: 32K context window, adequate for full research prompts.
+# Qwen2.5-7B via TRT-LLM has max_seq_len ~5184 (constrained by free_gpu_memory_fraction=0.05).
+LLM_MODEL    = os.environ.get("LLM_MODEL",    "meta-llama/Llama-3.1-8B-Instruct")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
