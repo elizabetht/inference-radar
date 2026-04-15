@@ -123,12 +123,13 @@ def fetch_arxiv(query: str, max_results: int = 5) -> list[dict]:
 
 def llm_curate(prompt: str) -> str:
     """Call the local LLM endpoint (OpenAI-compatible) to curate/analyze content."""
-    # Truncate prompt to ~24k chars (~6k tokens) to stay within 32K context window
-    if len(prompt) > 24000:
-        prompt = prompt[:24000] + "\n\n[truncated for context window]"
+    # SGLang Llama-3.1-8B effective max_seq_len ~5632 tokens (KV cache memory bound).
+    # Reserve 512 tokens for generation → ~5120 tokens for prompt → ~16K chars @ 3.2 chars/token.
+    if len(prompt) > 14000:
+        prompt = prompt[:14000] + "\n\n[truncated for context window]"
     payload = json.dumps({
         "model": LLM_MODEL,
-        "max_tokens": 1024,
+        "max_tokens": 512,
         "messages": [{"role": "user", "content": prompt}],
     }).encode()
     parsed = urllib.parse.urlparse(LLM_BASE_URL)
