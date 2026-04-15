@@ -1,0 +1,10 @@
+[
+  {
+    "name": "parse_error",
+    "status": "fail",
+    "notes": [
+      "Invalid \\escape: line 11 column 70 (char 293)"
+    ],
+    "metrics": {}
+  }
+]
